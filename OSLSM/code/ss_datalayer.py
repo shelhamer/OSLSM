@@ -7,7 +7,7 @@ import sys
 import traceback
 import util
 from util import cprint, bcolors
-from operator import itemgetter 
+from operator import itemgetter
 from functools import partial
 from skimage.transform import resize
 import copy
@@ -23,25 +23,25 @@ class DBInterface():
         self.lock = Lock()
         self.params = params
         self.load_items()
-        
+
         # initialize the random generator
         self.init_randget(params['read_mode'])
         self.cycle = 0
-        
+
     def init_randget(self, read_mode):
         self.rand_gen = random.Random()
         if read_mode == 'shuffle':
             self.rand_gen.seed()
         elif read_mode == 'deterministic':
-            self.rand_gen.seed(1385) #>>>Do not change<<< Fixed seed for deterministic mode. 
-    
+            self.rand_gen.seed(1385) #>>>Do not change<<< Fixed seed for deterministic mode.
+
     def update_seq_index(self):
         self.seq_index += 1
         if self.seq_index >= len(self.db_items):
             self.db_items = copy.copy(self.orig_db_items)
             self.rand_gen.shuffle(self.db_items)
             self.seq_index = 0
-    
+
     def next_pair(self):
         with self.lock:
             end_of_cycle = self.params.has_key('db_cycle') and self.cycle >= self.params['db_cycle']
@@ -50,7 +50,7 @@ class DBInterface():
                 self.cycle = 0
                 self.seq_index = len(self.db_items)
                 self.init_randget(self.params['read_mode'])
-                
+
             self.cycle += 1
             base_trans = None if self.params['image_base_trans'] is None else self.params['image_base_trans'].sample()
             self.update_seq_index()
@@ -69,7 +69,7 @@ class DBInterface():
                 return player, first_index, second_index
             else:
                 raise Exception('Only single_image and image_pair mode are supported')
-    
+
     def _remove_small_objects(self, items):
         filtered_item = []
         for item in items:
@@ -77,18 +77,18 @@ class DBInterface():
             if util.change_coordinates(mask, 32.0, 0.0).sum() > 2:
                 filtered_item.append(item)
         return filtered_item
-    
+
     def load_items(self):
         self.db_items = []
         if self.params.has_key('image_sets'):
             for image_set in self.params['image_sets']:
                 if image_set.startswith('pascal') or image_set.startswith('sbd'):
                     if image_set.startswith('pascal'):
-                        pascal_db = util.PASCAL(self.params['pascal_path'], image_set[7:])   
+                        pascal_db = util.PASCAL(self.params['pascal_path'], image_set[7:])
                     elif image_set.startswith('sbd'):
-                        pascal_db = util.PASCAL(self.params['sbd_path'], image_set[4:])   
+                        pascal_db = util.PASCAL(self.params['sbd_path'], image_set[4:])
                     #reads single image and all semantic classes are presented in the label
-                    
+
                     if self.params['output_type'] == 'single_image':
                         items = pascal_db.getItems(self.params['pascal_cats'], self.params['areaRng'], read_mode = util.PASCAL_READ_MODES.SEMANTIC_ALL)
                     #reads pair of images from one semantic class and and with binary labels
@@ -101,17 +101,17 @@ class DBInterface():
                 else:
                     raise Exception
             cprint('Total of ' + str(len(self.db_items)) + ' db items loaded!', bcolors.OKBLUE)
-            
+
             #reads pair of images from one semantic class and and with binary labels
             if self.params['output_type'] == 'image_pair':
                 items = self.db_items
-                
+
                 #In image_pair mode pair of images are sampled from the same semantic class
                 clusters = util.PASCAL.cluster_items(self.db_items)
-                
+
                 #for set_id in clusters.keys():
                 #    print clusters[set_id].length
-                
+
                 #db_items will be a list of tuples (set,j) in which set is the set that img_item belongs to and j is the index of img_item in that set
                 self.db_items = []
                 for item in items:
@@ -121,15 +121,15 @@ class DBInterface():
                     in_set_index = imgset.image_items.index(item)
                     self.db_items.append((imgset, in_set_index))
                 cprint('Total of ' + str(len(clusters)) + ' classes!', bcolors.OKBLUE)
-        
-        
+
+
         self.orig_db_items = copy.copy(self.db_items)
 
         assert(len(self.db_items) > 0), 'Did not load anything from the dataset'
         #assert(not self.params.has_key('db_cycle') or len(self.db_items) >= self.params['db_cycle']), 'DB Cycle should can not be more than items in the database = ' + str(len(self.db_items))
         #it forces the update_seq_index function to shuffle db_items and set seq_index = 0
         self.seq_index = len(self.db_items)
-            
+
 
 class PairLoaderProcess(Process):
     def __init__(self, name, queue, db_interface, params):
@@ -142,7 +142,7 @@ class PairLoaderProcess(Process):
             self.shape_divisible = params['shape_divisible']
         else:
             self.shape_divisible = 1
-        
+
         self.bgr = params['bgr']
         self.scale_256 = params['scale_256']
         self.first_label_mean = params['first_label_mean']
@@ -155,7 +155,7 @@ class PairLoaderProcess(Process):
         if self.bgr:
             #Always store mean in RGB format
             self.mean = self.mean[:,:, ::-1]
-            
+
     def run(self):
         try:
             while True:
@@ -168,7 +168,7 @@ class PairLoaderProcess(Process):
             cprint(str("".join(traceback.format_exception(*sys.exc_info()))), bcolors.FAIL)
             self.queue.put(None)
             raise Exception("".join(traceback.format_exception(*sys.exc_info())))
-    
+
     def load_next_frame(self, try_mode=True):
         next_pair = self.db_interface.next_pair()
         item = self.load_frame(*next_pair)
@@ -177,7 +177,7 @@ class PairLoaderProcess(Process):
             item = self.try_some_more(100)
         return item
 
-    # Tries to look for a valid image for a limited number of tries and then  
+    # Tries to look for a valid image for a limited number of tries and then
     # returns None if it doesn't find it
     def try_some_more(self, max_tries):
         i=0
@@ -189,36 +189,37 @@ class PairLoaderProcess(Process):
         return item
 
     def __prepross(self, frame_dict, shape = None):
-        if frame_dict['mask'] is None: 
+        if frame_dict['mask'] is None:
             return None
-        
+
         image = frame_dict['image'] - self.mean
         label = frame_dict['mask']
-         
+
         if shape is None:
             shape = np.array(image.shape[:-1], dtype=int)
         if self.shape_divisible != 1:
-            shape = np.array(self.shape_divisible * np.ceil(shape / self.shape_divisible), dtype=np.int)     
-        
+            shape = np.array(self.shape_divisible * np.ceil(shape / self.shape_divisible), dtype=np.int)
+
+        # TODO(shelhamer) resizing
         if tuple(shape) != image.shape[:-1]:
             image = resize(image, shape)
             label = resize(label, shape, order = 0, preserve_range=True)
-            
+
         if self.bgr:
             image = image[:,:, ::-1]
-            
+
         if self.scale_256:
             image *= 255
-            
+
         return image, label, shape
-    
+
     def __is_integer(self, mask):
       label_set = np.array(np.unique(mask), dtype=float)
       for label in label_set:
           if not label.is_integer():
               return False
       return True
-    
+
     def __get_deploy_info(self, player, index):
         if index is None:
             return None, None, None
@@ -230,13 +231,13 @@ class PairLoaderProcess(Process):
             return img_item.obj_ids, img_item.read_mask(True), img_item.read_img()
         else:
             raise Exception
-    
+
     def load_frame(self, player, first_index, second_index):
         cprint('Loading pair = ' + player.name + ', ' + str(first_index) + ', ' + str(second_index), bcolors.WARNING)
         if second_index in first_index:
             return None
-        
-        
+
+
         images1 = []
         labels1 = []
         shape1 = self.first_shape
@@ -246,13 +247,13 @@ class PairLoaderProcess(Process):
             images1.append(image1.transpose((2,0,1)))
             labels1.append(label1)
         item = dict(first_img=images1)
-        
+
         if second_index is not None:
             frame2_dict = player.get_frame(second_index)
             image2, label2, shape = self.__prepross(frame2_dict, self.second_shape)
             item['second_img'] = [image2.transpose((2,0,1))]
-        
-        
+
+
         if self.deploy_mode:
             first_semantic_labels=[]
             first_mask_orig=[]
@@ -263,21 +264,21 @@ class PairLoaderProcess(Process):
                 first_mask_orig.append(b)
                 first_img_orig.append(c)
 
-            deploy_info = dict(seq_name=player.name, 
-                               first_index=first_index, 
+            deploy_info = dict(seq_name=player.name,
+                               first_index=first_index,
                                first_img_orig=first_img_orig,
                                first_mask_orig=first_mask_orig,
                                first_semantic_labels=first_semantic_labels)
-            
+
             if second_index is not None:
                 second_semantic_labels, second_mask_orig, second_img_orig = self.__get_deploy_info(player, second_index)
                 deploy_info.update(second_index=second_index,
                                    second_img_orig=second_img_orig,
                                    second_mask_orig=second_mask_orig,
                                    second_semantic_labels=second_semantic_labels)
-            
+
             item['deploy_info'] =  deploy_info
-        
+
         #create first_labels
         for i in range(len(self.first_label_params)):
             name, down_scale, offset = self.first_label_params[i]
@@ -297,45 +298,45 @@ class PairLoaderProcess(Process):
                 item[name] = [nlabel2.reshape((1,) + nlabel2.shape)]
         if self.has_cont:
             item['cont'] = [0] + [1] * (len(first_index) - 1)
-            
+
         return item
-            
-class SSDatalayer(caffe.Layer): 
+
+class SSDatalayer(caffe.Layer):
     def __del__(self):
         for process in self.processes:
             process.terminate()
 
     def setup(self, bottom, top):
         params = eval(self.param_str)
-         
+
         if params.has_key('profile'):
             settings = __import__('ss_settings')
             profile = getattr(settings, params['profile'])
             profile.update(params)
             params = profile
-        
+
         self.all_top_names = ['first_img', 'second_img']
 
         if params.has_key('top_names'):
             self.top_names = copy.copy(params['top_names'])
         else:
             self.top_names = copy.copy(self.all_top_names)
-        
+
         assert(set(self.top_names) <= set(self.all_top_names)), str(self.top_names) + ' is not subset of ' + str(self.all_top_names)
-        
+
         if params.has_key('has_cont') and params['has_cont']:
             self.top_names.append('cont')
-            
+
         for i in range(len(params['first_label_params'])):
             name, down_scale, offset = params['first_label_params'][i]
             self.top_names.append(name)
-            
+
         for i in range(len(params['second_label_params'])):
             name, down_scale, offset = params['second_label_params'][i]
             self.top_names.append(name)
-        
+
         self.batch_size = params['batch_size']
-        
+
         self.queue = Queue(self.batch_size * params['worker_num'])
         self.db_interface = DBInterface(params)
         self.processes = []
@@ -364,7 +365,7 @@ class SSDatalayer(caffe.Layer):
                 #items are interleaved
                 inds = np.arange(len(obj_list)) * self.batch_size + itt
                 top[i].data[inds,...] = self.__stack(obj_list)
-        
+
     def reshape(self, bottom, top):
         self.init_queue()
         for i in range(len(self.top_names)):
@@ -374,18 +375,18 @@ class SSDatalayer(caffe.Layer):
                 top[i].reshape(len(arrays) * self.batch_size, *arrays[0].shape)
             else:
                 top[i].reshape(len(arrays) * self.batch_size)
-       
+
     def backward(self, top, propagate_down, bottom):
         pass
-    
+
     ###### Queue operations
     def init_queue(self):
         if not hasattr(self, 'cur_item') or self.cur_item is None:
             self.cur_item = self.queue.get()
-            
+
     def dequeue(self):
         self.init_queue()
         item = self.cur_item
         self.cur_item = None
         self.init_queue()
-        return item    
+        return item

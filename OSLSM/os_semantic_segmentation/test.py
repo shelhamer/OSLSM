@@ -11,6 +11,7 @@ import numpy as np
 import ss_datalayer
 import csv
 from skimage.io import imsave
+from PIL import Image
 from matplotlib.pyplot import imshow,show, figure
 import time
 
@@ -24,10 +25,10 @@ class LoaderOfPairs(object):
         self.PLP = ss_datalayer.PairLoaderProcess(None, None, dbi, profile_copy)
     def get_items(self):
         self.out = self.PLP.load_next_frame(try_mode=False)
-        return (np.asarray(self.out['first_img']), #[np.newaxis,:,:,:], 
-                np.asarray(self.out['first_label']), #[np.newaxis,:,:,:], 
-                np.asarray(self.out['second_img']), #[np.newaxis,:,:,:], 
-                np.asarray(self.out['second_label']), #[np.newaxis,:,:,:], 
+        return (np.asarray(self.out['first_img']), #[np.newaxis,:,:,:],
+                np.asarray(self.out['first_label']), #[np.newaxis,:,:,:],
+                np.asarray(self.out['second_img']), #[np.newaxis,:,:,:],
+                np.asarray(self.out['second_label']), #[np.newaxis,:,:,:],
                 self.out['deploy_info'])
     def get_items_no_return(self):
         self.out = self.PLP.load_next_frame(try_mode=False)
@@ -39,10 +40,10 @@ class LoaderOfPairs(object):
     # returns the outputs as images and also the first label in original img size
     def get_items_im(self):
         self.out = self.PLP.load_next_frame(try_mode=False)
-        return (self.correct_im(self.out['first_img']), 
-                self.out['original_first_label'], 
-                self.correct_im(self.out['second_img']), 
-                self.out['second_label'][0], 
+        return (self.correct_im(self.out['first_img']),
+                self.out['original_first_label'],
+                self.correct_im(self.out['second_img']),
+                self.out['second_label'][0],
                 self.out['deploy_info'])
 
 def __stack(obj_list):
@@ -60,8 +61,8 @@ def compute_net_inputs(pair_item, input_names):
     inputs = dict()
     for input_name in input_names:
         inputs[input_name] = __stack(pair_item[input_name])
-    return inputs   
-# the z(h)en function for measuring IOU  
+    return inputs
+# the z(h)en function for measuring IOU
 def measure(y_in, pred_in):
     thresh = .5
     y = y_in>thresh
@@ -111,8 +112,8 @@ def test_net(loader, model_path, weights_path, output_dir, test_iters, gpu, test
     # list of True Pos, True neg, False Pos, False Neg
     # Note: IOUs for all training categories will be zero; they are simply placeholders
     num_classes = 20
-    tp_list = [0]*num_classes 
-    fp_list = [0]*num_classes 
+    tp_list = [0]*num_classes
+    fp_list = [0]*num_classes
     fn_list = [0]*num_classes
     iou_list = [0]*num_classes
 
@@ -129,14 +130,14 @@ def test_net(loader, model_path, weights_path, output_dir, test_iters, gpu, test
         # make learning rate zero
         #net.params['w1s'][2].data[...] = 0.0
 
-        #old_w1 = net.params['w1s'][0].data.copy()  
+        #old_w1 = net.params['w1s'][0].data.copy()
 
         start_time = time.time()
         net.forward(**inputs)
         total_time += time.time()-start_time
         #assert((np.absolute(old_w1 -net.blobs['w1s'].data)).sum()==0.0)
-        
-        
+
+
         # get the input, output mask
         pred = net.blobs['score'].data[0,0]
         tp, tn, fp, fn = measure(second_label[0,0], net.blobs['score'].data[0,0])
@@ -145,15 +146,15 @@ def test_net(loader, model_path, weights_path, output_dir, test_iters, gpu, test
         tp_list[class_ind] += tp
         fp_list[class_ind] += fp
         fn_list[class_ind] += fn
-        # max in case both pred and label are zero 
-        iou_list = [tp_list[ic] / 
-                       float(max(tp_list[ic] + fp_list[ic] + fn_list[ic],1)) 
+        # max in case both pred and label are zero
+        iou_list = [tp_list[ic] /
+                       float(max(tp_list[ic] + fp_list[ic] + fn_list[ic],1))
                        for ic in range(num_classes)]
         # record
         recorder.append([ti, 0, class_ind, tp, tn, fp, fn, iou_img])
         #debug
         #print 'Min, Max of mask = ', pred.min(), pred.max()
-        
+
         if save_images:
             # save image
             imsave(os.path.join(soft_mask_dir, '%05d.png' % (ti)), pred)
@@ -163,7 +164,8 @@ def test_net(loader, model_path, weights_path, output_dir, test_iters, gpu, test
         pred[pred > 0] = 1
 
         if save_images:
-            imsave(os.path.join(final_mask_dir, '%05d.png' % (ti)), pred)    
+            imsave(os.path.join(final_mask_dir, '%05d.png' % (ti)), pred)
+            imsave(os.path.join(final_mask_dir, 'gt%05d.png' % (ti)), second_label[0, 0])
         # # Debug: Show Stuff
         # imshow(net.blobs['score'].data[0,0])
         # figure()
@@ -209,8 +211,8 @@ def test_net_fcn(loader, model_path, weights_path, output_dir, test_iters, gpu):
     recorder=[]
     # list of True Pos, True neg, False Pos, False Neg
     num_classes=15
-    tp_list = [0]*num_classes 
-    fp_list = [0]*num_classes 
+    tp_list = [0]*num_classes
+    fp_list = [0]*num_classes
     fn_list = [0]*num_classes
     iou_list = [0]*num_classes
 
@@ -226,7 +228,7 @@ def test_net_fcn(loader, model_path, weights_path, output_dir, test_iters, gpu):
         net.forward(**inputs)
         # get the input, output mask
         pred = net.blobs['score'].data[0,0]
-        
+
         for c in range(num_classes):
             cind =c+1 # ignore background class
             tp, tn, fp, fn = measure(first_label==cind, net.blobs['score'].data[0,cind])
@@ -249,12 +251,12 @@ def test_net_fcn(loader, model_path, weights_path, output_dir, test_iters, gpu):
         Threshold = 0.5
         pred[pred < Threshold] = 0
         pred[pred > 0] = 1
-        #imsave(os.path.join(final_mask_dir, '%05d.png' % (ti)), pred)    
+        #imsave(os.path.join(final_mask_dir, '%05d.png' % (ti)), pred)
 
     # record everything
-    # max in case both pred and label are zero 
-    iou_list = [tp_list[ic] / 
-                float(max(tp_list[ic] + fp_list[ic] + fn_list[ic],1)) 
+    # max in case both pred and label are zero
+    iou_list = [tp_list[ic] /
+                float(max(tp_list[ic] + fp_list[ic] + fn_list[ic],1))
                 for ic in range(num_classes)]
     with open(os.path.join(output_dir,'iou_results.txt'), 'w') as iou_file:
         iou_file.write('tp: ' +  ' '.join([str(x) for x in tp_list]) + '\n')
@@ -265,11 +267,11 @@ def test_net_fcn(loader, model_path, weights_path, output_dir, test_iters, gpu):
     with open(os.path.join(output_dir, 'all_results.csv'), 'wb') as allresults:
         writer = csv.writer(allresults)
         writer.writerows(recorder)
-                
+
 if __name__=='__main__':
     # check commandline args
     assert (len(sys.argv) >= 6), 'Usage: test.py [model_path] [weights_path] [output_dir] [test_iters] [ss_profile] [gpu_number=0] [save_images=0/1]'
-    
+
     model_path = os.path.abspath(sys.argv[1])
     weights_path = os.path.abspath(sys.argv[2])
     output_dir = os.path.abspath(sys.argv[3])
