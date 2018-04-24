@@ -97,3 +97,8 @@ LOCK
 LOG*
 CURRENT
 MANIFEST-*
+
+# project-specific
+
+OSLSM/snapshots
+OSLSM/results
