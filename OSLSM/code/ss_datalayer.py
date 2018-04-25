@@ -44,7 +44,7 @@ class DBInterface():
 
     def next_pair(self):
         with self.lock:
-            end_of_cycle = self.params.has_key('db_cycle') and self.cycle >= self.params['db_cycle']
+            end_of_cycle = 'db_cycle' in self.params and self.cycle >= self.params['db_cycle']
             if end_of_cycle:
                 assert(self.params['db_cycle'] > 0)
                 self.cycle = 0
@@ -62,7 +62,7 @@ class DBInterface():
             elif self.params['output_type'] == 'image_pair':
                 imgset, second_index = self.db_items[self.seq_index]
                 player = util.VideoPlayer(imgset, base_trans, self.params['image_frame_trans'])
-                set_indices = range(second_index) + range(second_index+1, player.length)
+                set_indices = list(range(second_index)) + list(range(second_index+1, player.length))
                 assert(len(set_indices) >= self.params['k_shot'])
                 self.rand_gen.shuffle(set_indices)
                 first_index = set_indices[:self.params['k_shot']]
@@ -80,7 +80,7 @@ class DBInterface():
 
     def load_items(self):
         self.db_items = []
-        if self.params.has_key('image_sets'):
+        if 'image_sets' in self.params:
             for image_set in self.params['image_sets']:
                 if image_set.startswith('pascal') or image_set.startswith('sbd'):
                     if image_set.startswith('pascal'):
@@ -138,7 +138,7 @@ class PairLoaderProcess(Process):
         self.db_interface = db_interface
         self.first_shape = params['first_shape']
         self.second_shape = params['second_shape']
-        if params.has_key('shape_divisible'):
+        if 'shape_divisible' in params:
             self.shape_divisible = params['shape_divisible']
         else:
             self.shape_divisible = 1
@@ -146,12 +146,12 @@ class PairLoaderProcess(Process):
         self.bgr = params['bgr']
         self.scale_256 = params['scale_256']
         self.first_label_mean = params['first_label_mean']
-        self.first_label_scale = 1.0 if not params.has_key('first_label_scale') else params['first_label_scale']
+        self.first_label_scale = 1.0 if not 'first_label_scale' in params else params['first_label_scale']
         self.mean = np.array(params['mean']).reshape(1,1,3)
         self.first_label_params = params['first_label_params']
         self.second_label_params = params['second_label_params']
-        self.deploy_mode = params['deploy_mode'] if params.has_key('deploy_mode') else False
-        self.has_cont = params['has_cont'] if params.has_key('has_cont') else False
+        self.deploy_mode = params['deploy_mode'] if 'deploy_mode' in params else False
+        self.has_cont = params['has_cont'] if 'has_cont' in params else False
         if self.bgr:
             #Always store mean in RGB format
             self.mean = self.mean[:,:, ::-1]
@@ -185,7 +185,7 @@ class PairLoaderProcess(Process):
         while(item is None and i<max_tries):
             item = self.load_next_frame(True)
             i+=1
-            print 'Skipping image because of tiny object'
+            print('Skipping image because of tiny object')
         return item
 
     def __prepross(self, frame_dict, shape = None):
@@ -309,7 +309,7 @@ class SSDatalayer(caffe.Layer):
     def setup(self, bottom, top):
         params = eval(self.param_str)
 
-        if params.has_key('profile'):
+        if 'profile' in params:
             settings = __import__('ss_settings')
             profile = getattr(settings, params['profile'])
             profile.update(params)
@@ -317,14 +317,14 @@ class SSDatalayer(caffe.Layer):
 
         self.all_top_names = ['first_img', 'second_img']
 
-        if params.has_key('top_names'):
+        if 'top_names' in params:
             self.top_names = copy.copy(params['top_names'])
         else:
             self.top_names = copy.copy(self.all_top_names)
 
         assert(set(self.top_names) <= set(self.all_top_names)), str(self.top_names) + ' is not subset of ' + str(self.all_top_names)
 
-        if params.has_key('has_cont') and params['has_cont']:
+        if 'has_cont' in params and params['has_cont']:
             self.top_names.append('cont')
 
         for i in range(len(params['first_label_params'])):

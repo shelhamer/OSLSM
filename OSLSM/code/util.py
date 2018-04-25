@@ -11,16 +11,11 @@ import copy
 import PIL.Image as Image
 import yaml
 import time
-import md5
+import hashlib
 
 debug_mode = False
 def cprint(string, style = None):
-    if not debug_mode and style != bcolors.FAIL and style != bcolors.OKBLUE:
-        return
-    if style is None:
-        print str(string)
-    else:
-        print style + str(string) + bcolors.ENDC
+    print(str(string))
 
 class bcolors:
     HEADER = '\033[95m'
@@ -41,17 +36,17 @@ def read_img(img_path):
         tmp_image[:,:,0] = tmp_image[:,:,1] = tmp_image[:,:,2] = uint_image
         uint_image = tmp_image
     return np.array(uint_image, dtype=np.float32)/255.0
-        
+
 def read_mask(mask_path):
     #read mask
     m_uint = np.array(Image.open(mask_path))
     fg = np.unique(m_uint)
     if not (len(m_uint.shape) == 2 and ((len(fg) == 2 and fg[0] == 0 and fg[1] == 255) or (len(fg) == 1 and (fg[0] == 0 or fg[0] == 255)))):
-        print mask_path, fg, m_uint.shape
+        print(mask_path, fg, m_uint.shape)
         raise Exception('Error in reading mask')
     return np.array(m_uint, dtype=np.float32) / 255.0
-    
-    
+
+
 def read_flo_file(file_path):
     """
     reads a flo file, it is for little endian architectures,
@@ -87,11 +82,11 @@ def write_flo_file(file_path, data2D):
         w.tofile(f)
         h.tofile(f)
         data2D.astype('float32').tofile(f);
-        
+
 def add_noise_to_mask(cmask, r_param = (15, 15), mult_param = (20, 5), threshold = .2):
     radius = max(np.random.normal(*r_param), 1)
     mult = max(np.random.normal(*mult_param), 2)
-    
+
     selem = disk(radius)
     mask2d = np.zeros(cmask.shape + (2,))
     mask2d[:, :, 0] = rank.mean((1 - cmask).copy(), selem=selem) / 255.0
@@ -100,9 +95,9 @@ def add_noise_to_mask(cmask, r_param = (15, 15), mult_param = (20, 5), threshold
     exp_fmask = np.exp(mult * mask2d);
     max_fmask = exp_fmask[:,:,1] / np.sum(exp_fmask, 2);
     max_fmask[max_fmask < threshold] = 0;
-    
+
     return max_fmask
-    
+
 class Timer(object):
     def __init__(self):
         self.total_time = 0.
@@ -129,34 +124,34 @@ def parse_file(input_path, output_path, dictionary):
         with open(output_path, 'w') as out_file:
             data = string.Template(in_file.read())
             out_file.write(data.substitute(**dictionary))
-            
+
 
 def crop(img, bbox, output_shape = None, resize_order = 1, clip = True):
     bsize = bbox.size()
     if bsize[0] == 0:
         raise Exception('Cropping bbox can not be empty.')
-    
+
     img_bbox = BBox(0, img.shape[0], 0, img.shape[1])
     intbox = img_bbox.copy()
     intbox.intersect(bbox)
-    
+
     output = np.zeros(bsize + img.shape[2:])
     output[(intbox.top-bbox.top):(intbox.bottom-bbox.top), (intbox.top-bbox.left):(intbox.bottom-bbox.left)] = img[intbox.top:intbox.bottom, intbox.left:intbox.right]
-    
+
     if output_shape is None or tuple(output_shape) == intbox.size():
         return output
     return resize(output, output_shape, order = resize_order, mode = 'nearest', clip = clip, preserve_range=True)
-        
+
 
 def crop_undo(cropped_img, cropping_bbox, img_shape, resize_order = 1):
     bsize = cropping_bbox.size()
     if bsize != cropped_img.shape[:2]:
         cropped_img = resize(cropped_img, bsize, order = resize_order, mode = 'nearest', preserve_range=True)
-    img = np.zeros(img_shape + cropped_img.shape[2:])    
+    img = np.zeros(img_shape + cropped_img.shape[2:])
     img_bbox = BBox(0, img.shape[0], 0, img.shape[1])
     intbox = img_bbox.copy()
     intbox.intersect(cropping_bbox)
-    
+
     img[intbox.top:intbox.bottom, intbox.left:intbox.right] = cropped_img[(intbox.top-cropping_bbox.top):(intbox.bottom-cropping_bbox.top), (intbox.top-cropping_bbox.left):(intbox.bottom-cropping_bbox.left)]
     return img
 
@@ -177,12 +172,12 @@ def change_coordinates(array, down_scale, offset, order = 0, preserve_range = Tr
         new_array = array
     else:
         raise Exception
-        
+
     if new_h != orig_h or new_w != orig_w:
         return resize(new_array, (new_h,new_w) + array.shape[2:], order = order, preserve_range = preserve_range)
     else:
         return new_array.copy()
-        
+
 #defaults is a list of (key, val) is val is None key is required field
 def check_params(params, **kwargs):
     for key, val in kwargs.items():
@@ -230,7 +225,7 @@ def read_netflow_instance(netflow_db, instance_id):
         #x,y = T2.transform_points(locs2[0].ravel(), locs2[1].ravel(), locs2[0].shape)
         #locs2 = np.concatenate((x,y)).reshape((2,) + img_size)
         #flow_trans = locs2 - locs1
-        
+
         #final_flow = np.zeros((2,) + img_size)
         #T1_cp = copy.deepcopy(T1)
         #T1_cp.color_adjustment_param = None
@@ -247,10 +242,10 @@ def compute_flow(T1, T2, object_size, img_size, flow = None):
     # = A + B - T2((0,0)) where A = T2(i,j) - T1(i,j), B = T2(f1(i,j))
     # A(T1(i, j)) = T2(i,j) - T1(i,j) ==> A((m,n)) = T2(T1^-1(m,n)) - (m, n)
     # B(T1(i, j)) = T2(f1(i,j)) ==(see *)==> BT1(m,n) = B(T^-1(m,n))
-        
+
     # * Given an image I and transformation T: (IT is the image after applying transformation T)
     # IT[k,l] = I[T^-1(k,l)]
-        
+
     # 1) Compute A
     newx = np.arange(img_size[1])
     newy = np.arange(img_size[0])
@@ -260,7 +255,7 @@ def compute_flow(T1, T2, object_size, img_size, flow = None):
     x,y = T2.transform_points(x, y, object_size)
     locs2 = np.concatenate((x,y)).reshape((2,) + locs1[0].shape)
     final_flow = locs2 - locs1
-        
+
     # 2) Compute B - T2((0,0))
     if flow is not None:
         # B
@@ -274,11 +269,11 @@ def compute_flow(T1, T2, object_size, img_size, flow = None):
         x0, y0 = T2.transform_points(np.array((0,)), np.array((0,)), object_size)
         b_flow[0] -= x0[0]
         b_flow[1] -= y0[0]
-        
+
         #Add it to the final flow
         final_flow += b_flow
     return final_flow.transpose((1,2,0))
-        
+
 def sample_trans(base_tran, trans_dist):
     if base_tran is None and trans_dist is None:
         return None
@@ -295,25 +290,25 @@ def sample_trans(base_tran, trans_dist):
         #new_trans = None
         #if tran_dist is not None:
             #new_trans = trans_dist.sample()
-        
+
         #if cur_trans is None:
             #cur_trans = new_trans
         #elif new_trans is not None:
             #cur_trans = cur_trans + tran.sample()
     #return cur_trans
 #################################### Util classes
-#Integer value bbox 
+#Integer value bbox
 #bottom and right are exlusive
 class BBox:
     def __init__(self, top, bottom, left, right):
         self.init(top, bottom, left, right)
-           
+
     def init(self, top, bottom, left, right):
         self.top = top
         self.bottom = bottom
         self.left = left
         self.right = right
-        
+
     def intersect(self, bbox):
         if self.isempty() or bbox.isempty():
             self.init(0,0,0,0)
@@ -322,7 +317,7 @@ class BBox:
         self.bottom = min(self.bottom, bbox.bottom)
         self.left = max(self.left, bbox.left)
         self.right = min(self.right, bbox.right)
-   
+
     def pad(self, rpad, cpad=None):
         if self.isempty():
             raise Exception('Can not pad empty bbox')
@@ -332,7 +327,7 @@ class BBox:
         self.bottom += rpad
         self.left -= cpad
         self.right += cpad
-       
+
     def scale(self, rscale, cscale=None):
         if self.isempty():
             return
@@ -341,21 +336,21 @@ class BBox:
         rpad = int((rscale - 1) * (self.bottom - self.top) / 2.0)
         cpad = int((cscale - 1) * (self.right - self.left) / 2.0)
         self.pad(rpad, cpad)
-    
+
     def move(self, rd, cd):
         self.top += rd
         self.bottom += rd
         self.left += cd
         self.right += cd
-        
+
     def isempty(self):
         return (self.bottom <= self.top) or (self.right <= self.left)
-    
+
     def size(self):
         if self.isempty():
             return (0,0)
         return (self.bottom - self.top, self.right - self.left)
-        
+
     def copy(self):
         return copy.copy(self)
     @staticmethod
@@ -367,29 +362,29 @@ class BBox:
         top, bottom = np.where(rows)[0][[0, -1]]
         left, right = np.where(cols)[0][[0, -1]]
         return BBox(top, bottom+1, left, right+1)
-    
+
 class Cache:
     def __init__(self, max_size = 10):
         self.max_size = max_size
         self.cache = dict()
         self.key_queue = []
     def has_key(self, key):
-        return self.cache.has_key(key)
+        return key in self.cache
 
     def __setitem__(self, key, value):
-        if self.cache.has_key(key):
+        if key in self.cache:
             self.__delitem__(key)
         self.cache.__setitem__(key, copy.deepcopy(value))
         self.key_queue.append(key)
         if len(self.cache) > self.max_size:
             self.__delitem__(self.key_queue[0])
-        
+
     def __getitem__(self, key):
         assert self.cache.has_key(key)
         self.key_queue.remove(key)
         self.key_queue.append(key)
         return copy.deepcopy(self.cache.__getitem__(key))
-        
+
     def __delitem__(self, key):
         self.cache.__delitem__(key)
         self.key_queue.remove(key)
@@ -403,11 +398,11 @@ class Map(dict):
         super(Map, self).__init__(*args, **kwargs)
         for arg in args:
             if isinstance(arg, dict):
-                for k, v in arg.iteritems():
+                for k, v in arg.items():
                     self[k] = v
 
         if kwargs:
-            for k, v in kwargs.iteritems():
+            for k, v in kwargs.items():
                 self[k] = v
 
     def __getattr__(self, attr):
@@ -426,34 +421,34 @@ class Map(dict):
     def __delitem__(self, key):
         super(Map, self).__delitem__(key)
         del self.__dict__[key]
-        
-########################################################################### Sequence Generator ######################################################################## 
+
+########################################################################### Sequence Generator ########################################################################
 class VideoPlayer:
     def __init__(self, video_item, base_trans = None, frame_trans_dist = None, frame_noise_dist = None, step = 1, offset = 0, max_len = np.inf, flo_method = None):
         self.cache = Cache()
         self.name = video_item.name
         if offset != 0:
             self.name += '_o' + str(offset)
-            
+
         if step != 1:
             self.name += '_s' + str(step)
-            
+
         if not np.isinf(max_len):
             self.name += '_m' + str(max_len)
-        
+
         self.video_item = video_item
         self.step = step
         self.offset = offset
         self.max_len = max_len
         self.flo_method = flo_method
-        
+
         ##compute img_ids
         if step > 0:
             a = self.offset
             b = self.video_item.length
         elif step < 0:
             a = self.video_item.length - 1 - self.offset
-            b = - 1    
+            b = - 1
         self.img_ids = range(a, b, self.step)
         if not np.isinf(self.max_len):
             self.img_ids = self.img_ids[:self.max_len]
@@ -471,7 +466,7 @@ class VideoPlayer:
                 gt_mapping = sample_trans(mapping, frame_noise_dist)
                 self.mappings.append(mapping)
                 self.gt_mappings.append(gt_mapping)
-    
+
     def get_frame(self, frame_id, compute_iflow = False):
         if self.cache.has_key(frame_id):
             img, mask, obj_size = self.cache[frame_id]
@@ -487,7 +482,7 @@ class VideoPlayer:
                 cprint('Failed to load mask \'' + str(img_id) + '\' for video \'' + self.name + '\'. Return None mask..', bcolors.FAIL)
                 mask = None
                 obj_size = np.array([50, 50])
-                
+
             if self.mappings is not None:
                 img = self.mappings[frame_id].transform_img(img.copy(), obj_size, img.shape[:2], mask)
                 if mask is not None:
@@ -495,7 +490,7 @@ class VideoPlayer:
                     mask[mask == -1] = 0
             self.cache[frame_id] = (img, mask, obj_size)
         output = dict(image=img, mask=mask)
-        
+
         if compute_iflow:
             try:
                 iflow = self.video_item.read_iflow(img_id, self.step, self.flo_method)
@@ -506,10 +501,10 @@ class VideoPlayer:
                 output['iflow'] = iflow
             else:
                 output['iflow'] = compute_flow(self.mappings[frame_id], self.gt_mappings[frame_id - 1], obj_size, img.shape[:2], flow = iflow)
-        
-        if output.has_key('mask') and output['mask'] is not None:
+
+        if 'mask' in output and output['mask'] is not None:
             assert output['mask'].shape[0] == output['image'].shape[0] and output['mask'].shape[1] == output['image'].shape[1]
-        if output.has_key('iflow'):
+        if 'iflow' in output:
             assert output['iflow'].shape[0] == output['image'].shape[0] and output['iflow'].shape[1] == output['image'].shape[1]
         return output
 
@@ -520,7 +515,7 @@ class ImagePlayer:
         self.imgs = []
         self.masks = []
         self.image_item = image_item
-        
+
         img = image_item.read_img()
         mask = image_item.read_mask()
         obj_size = BBox.get_bbox(mask).size()
@@ -538,12 +533,12 @@ class ImagePlayer:
             else:
                 timg = img.copy()
                 tmask = mask.copy()
-            tmask[tmask == -1] = 0          
+            tmask[tmask == -1] = 0
             self.imgs.append(timg)
             self.masks.append(tmask)
             gt_mappings.append(gt_mapping)
             mappings.append(mapping)
-            
+
         if compute_iflow:
             self.iflows = [None]
             for i in range(1, length):
@@ -554,7 +549,7 @@ class ImagePlayer:
         output = dict(image=self.imgs[frame_id], mask=self.masks[frame_id])
         if compute_iflow:
             output['iflow'] = self.iflows[frame_id]
-        return output 
+        return output
 
 ########################################################################### Read DBs into DBItems ################################################################################
 class DAVIS:
@@ -573,7 +568,7 @@ class DAVIS:
             db_info = yaml.load(f)
         sequences = [x for x in db_info['sequences'] if x['set'] in sets and (categories is None or x['name'] in categories)]
         assert len(sequences) > 0
-        
+
         items = []
         for seq in sequences:
             name = seq['name']
@@ -592,26 +587,26 @@ class COCO:
             dataType = 'val2014'
         else:
             raise Exception('split \'' + dataType + '\' is not valid! Valid splits: training/test')
-        
+
         self.db_path = db_path
         self.dataType = dataType
-        
+
     def getItems(self, cats=[], areaRng=[], iscrowd=False):
-        
+
         annFile='%s/annotations/instances_%s.json' % (self.db_path, self.dataType)
-        
+
         coco = self.pycocotools.coco.COCO(annFile)
         catIds = coco.getCatIds(catNms=cats);
         anns = coco.getAnnIds(catIds=catIds, areaRng=areaRng, iscrowd=iscrowd)
         cprint(str(len(anns)) + ' annotations read from coco', bcolors.OKGREEN)
-        
+
         items = []
         for i in range(len(anns)):
             ann = anns[i]
             item = DBCOCOItem('coco-'  + self.dataType + str(i), self.db_path, self.dataType, ann, coco, self.pycocotools)
             items.append(item)
-        return items    
-        
+        return items
+
 class PASCAL_READ_MODES:
     #Returns list of DBImageItem each has the image and one object instance in the mask
     INSTANCE = 0
@@ -627,20 +622,20 @@ class PASCAL:
             dataType = 'val'
         else:
             raise Exception('split \'' + dataType + '\' is not valid! Valid splits: training/test')
-        
+
         self.db_path = db_path
         classes = ['aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car' , 'cat', 'chair', 'cow', 'diningtable', 'dog', 'horse', 'motorbike', 'person', 'potted plant', 'sheep', 'sofa', 'train', 'tv/monitor']
         self.name_id_map = dict(zip(classes, range(1, len(classes) + 1)))
         self.id_name_map = dict(zip(range(1, len(classes) + 1), classes))
         self.dataType = dataType
-    
-      
+
+
     def getCatIds(self, catNms=[]):
         return [self.name_id_map[catNm] for catNm in catNms]
-    
+
     def get_anns_path(self, read_mode):
-        return osp.join(self.db_path, self.dataType + '_' + str(read_mode) + '_anns.pkl') 
-    
+        return osp.join(self.db_path, self.dataType + '_' + str(read_mode) + '_anns.pkl')
+
     def get_unique_ids(self, mask, return_counts=False, exclude_ids = [0, 255]):
         ids, sizes = np.unique(mask, return_counts=True)
         ids = list(ids)
@@ -650,16 +645,16 @@ class PASCAL:
             id_index = ids.index(ex_id)
             ids.remove(ex_id)
             sizes.remove(sizes[id_index])
-        
+
         assert(len(ids) == len(sizes))
         if return_counts:
             return ids, sizes
         else:
             return ids
-    
+
     def create_anns(self, read_mode):
         with open(osp.join(self.db_path, 'ImageSets', 'Segmentation', self.dataType + '.txt'), 'r') as f:
-            lines = f.readlines()    
+            lines = f.readlines()
             names = []
             for line in lines:
                 if line.endswith('\n'):
@@ -675,7 +670,7 @@ class PASCAL:
             class_ids = self.get_unique_ids(mclass_uint)
             obj_ids, obj_sizes = self.get_unique_ids(mobj_uint, return_counts = True)
 
-            if read_mode == PASCAL_READ_MODES.INSTANCE:  
+            if read_mode == PASCAL_READ_MODES.INSTANCE:
                 for obj_idx in xrange(len(obj_ids)):
                     class_id = int(np.median(mclass_uint[mobj_uint == obj_ids[obj_idx]]))
                     assert( class_id != 0 and class_id != 255 and obj_ids[obj_idx] != 0 and obj_ids[obj_idx] != 255)
@@ -684,11 +679,11 @@ class PASCAL:
                 for class_id in class_ids:
                     assert(class_id != 0 or class_id != 255)
                     anns.append(dict(image_name=item, mask_name=item, class_ids=[class_id]))
-            elif read_mode == PASCAL_READ_MODES.SEMANTIC_ALL:  
+            elif read_mode == PASCAL_READ_MODES.SEMANTIC_ALL:
                 anns.append(dict(image_name=item, mask_name=item, class_ids=class_ids))
         with open(self.get_anns_path(read_mode), 'w') as f:
             pickle.dump(anns, f)
-            
+
     def load_anns(self, read_mode):
         path = self.get_anns_path(read_mode)
         if not osp.exists(path):
@@ -696,14 +691,14 @@ class PASCAL:
         with open(path, 'rb') as f:
             anns = pickle.load(f)
         return anns
-    
+
     def get_anns(self, catIds=[], areaRng=[], read_mode = PASCAL_READ_MODES.INSTANCE):
         if areaRng == []:
             areaRng = [0, np.inf]
         anns = self.load_anns(read_mode)
         if catIds == [] and areaRng == [0, np.inf]:
             return anns
-        
+
         if read_mode == PASCAL_READ_MODES.INSTANCE:
             filtered_anns = [ann for ann in anns if ann['class_ids'][0] in catIds and areaRng[0] < ann['object_sizes'][0] and ann['object_sizes'][0] < areaRng[1]]
         else:
@@ -717,19 +712,19 @@ class PASCAL:
                     ann['class_ids'] = sorted(list(class_inter))
                     filtered_anns.append(ann)
         return filtered_anns
-    
+
     def getItems(self, cats=[], areaRng=[], read_mode = PASCAL_READ_MODES.INSTANCE):
         if len(cats) == 0:
             catIds = self.id_name_map.keys()
         else:
             catIds = self.getCatIds(catNms=cats)
         catIds = np.sort(catIds)
-        
+
         anns = self.get_anns(catIds=catIds, areaRng=areaRng, read_mode=read_mode)
         cprint(str(len(anns)) + ' annotations read from pascal', bcolors.OKGREEN)
-        
+
         items = []
-        
+
         ids_map = None
         if read_mode == PASCAL_READ_MODES.SEMANTIC_ALL:
             old_ids = catIds
@@ -754,10 +749,10 @@ class PASCAL:
             item_id = item.obj_ids
             assert(len(item_id) == 1), 'For proper clustering, items should only have one id'
             item_id = item_id[0]
-            if clusters.has_key(item_id):
+            if item_id in clusters:
                 clusters[item_id].append(item)
             else:
-              clusters[item_id] = DBImageSetItem('set class id = ' + str(item_id), [item])    
+              clusters[item_id] = DBImageSetItem('set class id = ' + str(item_id), [item])
         return clusters
 ########################################################################### DB Items ###################################################################################
 class DBVideoItem:
@@ -774,16 +769,16 @@ class DBDAVISItem(DBVideoItem):
         DBVideoItem.__init__(self, name, length)
         self.img_root = img_root
         self.ann_root = ann_root
-    
+
     def read_img(self, img_id):
         file_name = osp.join(self.img_root, '%05d.jpg' % (img_id))
         return read_img(file_name)
-        
+
     def read_mask(self, img_id):
         file_name = osp.join(self.ann_root, '%05d.png' % (img_id))
         mask = read_mask(file_name)
-        return mask 
-        
+        return mask
+
     def read_iflow(self, img_id, step, method):
         if method == 'LDOF':
             if step == 1:
@@ -804,7 +799,7 @@ class DBDAVISItem(DBVideoItem):
         try:
             return read_flo_file(flow_name)
         except IOError as e:
-            print "Unable to open file", str(e)#Does not exist OR no read permissions
+            print ("Unable to open file", str(e))#Does not exist OR no read permissions
 
 class DBImageSetItem(DBVideoItem):
     def __init__(self, name, image_items = []):
@@ -815,7 +810,7 @@ class DBImageSetItem(DBVideoItem):
         self.length += 1
     def read_img(self, img_id):
         return self.image_items[img_id].read_img()
-        
+
     def read_mask(self, img_id):
         return self.image_items[img_id].read_mask()
 
@@ -836,23 +831,23 @@ class DBCOCOItem(DBImageItem):
         self.dataType = dataType
         self.coco_db = coco_db
         self.pycocotools = pycocotools
-        
+
     def read_mask(self):
         ann = self.coco_db.loadAnns(self.ann_info)[0]
         img_cur = self.coco_db.loadImgs(ann['image_id'])[0]
-        
+
         rle = self.pycocotools.mask.frPyObjects(ann['segmentation'], img_cur['height'], img_cur['width'])
         m_uint = self.pycocotools.mask.decode(rle)
         m = np.array(m_uint[:, :, 0], dtype=np.float32)
         return m
-    
+
     def read_img(self):
         ann = self.coco_db.loadAnns(self.ann_info)[0]
         img_cur = self.coco_db.loadImgs(ann['image_id'])[0]
         img_path = '%s/images/%s/%s' % (self.db_path, self.dataType, img_cur['file_name'])
         return read_img(img_path)
-    
-    
+
+
 class DBPascalItem(DBImageItem):
     def __init__(self, name, img_path, mask_path, obj_ids, ids_map = None):
         DBImageItem.__init__(self, name)
@@ -865,7 +860,7 @@ class DBPascalItem(DBImageItem):
             self.ids_map = ids_map
     def read_mask(self, orig_mask=False):
         mobj_uint = np.array(Image.open(self.mask_path))
-        
+
         if orig_mask:
             return mobj_uint.astype(np.float32)
         m = np.zeros(mobj_uint.shape, dtype=np.float32)

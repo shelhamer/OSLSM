@@ -20,7 +20,7 @@ class LoaderOfPairs(object):
     def __init__(self, profile):
         profile_copy = profile.copy()
         profile_copy['first_label_params'].append(('original_first_label', 1.0, 0.0))
-	profile_copy['deploy_mode'] = True
+        profile_copy['deploy_mode'] = True
         dbi = ss_datalayer.DBInterface(profile)
         self.PLP = ss_datalayer.PairLoaderProcess(None, None, dbi, profile_copy)
     def get_items(self):
@@ -94,16 +94,16 @@ def test_net(loader, model_path, weights_path, output_dir, test_iters, gpu, test
 
 
     # load the parent net
-    print model_path
-    net = caffe.Net(model_path, weights_path, caffe.TEST)
+    print(model_path)
+    net = caffe.Net(model_path, weights=weights_path, phase=caffe.TEST)
     pred_dir = os.path.join(output_dir, 'pred')
     soft_mask_dir = os.path.join(pred_dir, 'soft')
     final_mask_dir = os.path.join(pred_dir, 'hard')
     first_label_dir = os.path.join(output_dir, 'first_label')
-    os.makedirs(pred_dir)
-    os.makedirs(first_label_dir)
-    os.makedirs(soft_mask_dir)
-    os.makedirs(final_mask_dir)
+    os.makedirs(pred_dir, exist_ok=True)
+    os.makedirs(first_label_dir, exist_ok=True)
+    os.makedirs(soft_mask_dir, exist_ok=True)
+    os.makedirs(final_mask_dir, exist_ok=True)
 
     # record all the stats
     recorder=[]
@@ -124,7 +124,7 @@ def test_net(loader, model_path, weights_path, output_dir, test_iters, gpu, test
     for ti in range(test_iters):
         iter_start_time = time.time()
         first_img, first_label, second_img, second_label, deploy_info = loader.get_items()
-        print '>'*10, 'Test Iteration: ', ti
+        print('>'*10, 'Test Iteration: ', ti)
         inputs = compute_net_inputs(loader.out, net.inputs)
         #TODO: REMOVE THIS OR THE NET DOESNT DO GRAD DESCENT
         # make learning rate zero
@@ -186,87 +186,17 @@ def test_net(loader, model_path, weights_path, output_dir, test_iters, gpu, test
                 iou_file.write('fn: ' +  ' '.join([str(x) for x in fn_list]) + '\n')
                 iou_file.write('iou (all categories): ' +  ' '.join([str(x) for x in iou_list]) + '\n')
                 iou_file.write('mean_iou (only test categories): ' + str(np.mean(np.take(iou_list, test_cats_indicator))) + '\n')
-            with open(os.path.join(output_dir, 'all_results.csv'), 'wb') as allresults:
+            with open(os.path.join(output_dir, 'all_results.csv'), 'w') as allresults:
                     writer = csv.writer(allresults)
                     writer.writerows(recorder)
         total_time_iter += time.time() - iter_start_time
 
     # record the time per iter
-    print '\n--Time per the iteration forward is {}'.format(total_time/float(test_iters))
-    print '\n--Time per the whole iteration is {}'.format(total_time_iter/float(test_iters))
+    print('\n--Time per the iteration forward is {}'.format(total_time/float(test_iters)))
+    print('\n--Time per the whole iteration is {}'.format(total_time_iter/float(test_iters)))
 
     # Print meanIOU
-    print '\n--The mean IOU for this fold is {}'.format(np.mean(np.take(iou_list, test_cats_indicator)))
-
-"""
-    Test FCN on 15 training categories
-"""
-def test_net_fcn(loader, model_path, weights_path, output_dir, test_iters, gpu):
-    caffe.set_mode_gpu()
-    caffe.set_device(gpu)
-    # load the parent net
-    print model_path
-    net = caffe.Net(model_path, weights_path, caffe.TEST)
-    # record all the stats
-    recorder=[]
-    # list of True Pos, True neg, False Pos, False Neg
-    num_classes=15
-    tp_list = [0]*num_classes
-    fp_list = [0]*num_classes
-    fn_list = [0]*num_classes
-    iou_list = [0]*num_classes
-
-    for ti in range(test_iters):
-        loader.get_items_no_return()
-        print '>'*10, 'Test Iteration: ', ti
-        inputs = compute_net_inputs(loader.out, net.inputs)
-        first_img = inputs['first_img']
-        first_label = np.asarray(loader.out['first_label'])
-        print 'First Img = ', first_img.shape
-        print 'First Label = ', first_label.shape
-        print 'Label Max = ', first_label.max()
-        net.forward(**inputs)
-        # get the input, output mask
-        pred = net.blobs['score'].data[0,0]
-
-        for c in range(num_classes):
-            cind =c+1 # ignore background class
-            tp, tn, fp, fn = measure(first_label==cind, net.blobs['score'].data[0,cind])
-            tp_list[c] += tp
-            fp_list[c] += fp
-            fn_list[c] += fn
-            # if (first_label==cind).sum() > 5:
-            #     # Debug: Show Stuff
-            #     imshow(net.blobs['score'].data[0,cind])
-            #     figure()
-            #     imshow(net.blobs['first_img'].data[0,0])
-            #     figure()
-            #     imshow(first_label[0,0]==cind)
-            #     print (first_label==cind).sum()
-            #     print tp, fp, fn
-            #     show()
-
-        # record
-        recorder.append([ti, 0, 0, tp, tn, fp, fn, 0.0])
-        Threshold = 0.5
-        pred[pred < Threshold] = 0
-        pred[pred > 0] = 1
-        #imsave(os.path.join(final_mask_dir, '%05d.png' % (ti)), pred)
-
-    # record everything
-    # max in case both pred and label are zero
-    iou_list = [tp_list[ic] /
-                float(max(tp_list[ic] + fp_list[ic] + fn_list[ic],1))
-                for ic in range(num_classes)]
-    with open(os.path.join(output_dir,'iou_results.txt'), 'w') as iou_file:
-        iou_file.write('tp: ' +  ' '.join([str(x) for x in tp_list]) + '\n')
-        iou_file.write('fp: ' +  ' '.join([str(x) for x in fp_list]) + '\n')
-        iou_file.write('fn: ' +  ' '.join([str(x) for x in fn_list]) + '\n')
-        iou_file.write('iou: ' +  ' '.join([str(x) for x in iou_list]) + '\n')
-        iou_file.write('mean_iou: ' + str(np.mean(iou_list)) + '\n')
-    with open(os.path.join(output_dir, 'all_results.csv'), 'wb') as allresults:
-        writer = csv.writer(allresults)
-        writer.writerows(recorder)
+    print('\n--The mean IOU for this fold is {}'.format(np.mean(np.take(iou_list, test_cats_indicator))))
 
 if __name__=='__main__':
     # check commandline args
@@ -291,7 +221,7 @@ if __name__=='__main__':
     test_cats_indicator = [ind for ind in range(20) if (profile.default_pascal_cats[ind] in profile.pascal_cats)]
 
 
-    os.makedirs(output_dir)
+    os.makedirs(output_dir, exist_ok=True)
 
     # Pair Loader Process
     loader = LoaderOfPairs(profile)
